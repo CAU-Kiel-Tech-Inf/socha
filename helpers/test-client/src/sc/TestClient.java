@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import sc.api.plugins.IGamePlugin;
 import sc.framework.plugins.Player;
 import sc.networking.INetworkInterface;
+import sc.networking.InvalidScoreDefinitionException;
 import sc.networking.TcpNetwork;
 import sc.networking.clients.XStreamClient;
 import sc.protocol.requests.*;
@@ -17,15 +18,15 @@ import sc.shared.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.net.Socket;
-import java.util.Arrays;
-import java.util.List;
-import java.util.ServiceLoader;
-import java.util.StringTokenizer;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntToDoubleFunction;
+import java.util.stream.Collectors;
 
 import static java.lang.Math.pow;
 import static sc.Util.factorial;
@@ -120,8 +121,7 @@ public class TestClient extends XStreamClient {
       players[0].name = players[0].name + "-1";
       players[1].name = players[1].name + "-2";
     }
-    logger.info("Player1: " + players[0]);
-    logger.info("Player2: " + players[1]);
+    logger.info("Players: " + Arrays.toString(players));
 
     try {
       if (startServer) {
@@ -187,6 +187,8 @@ public class TestClient extends XStreamClient {
 
   private boolean gameProgressing = false;
 
+  private final Score[] scores = new Score[2];
+
   @Override
   protected void onObject(ProtocolMessage message) {
     if (message == null) {
@@ -217,8 +219,59 @@ public class TestClient extends XStreamClient {
         logger.warn(log.substring(0, log.length() - 2), finishedTests);
 
         finishedTests++;
-        for (ClientPlayer player : players)
-          send(new PlayerScoreRequest(player.name));
+        ScoreDefinition scoreDefinition = result.getDefinition();
+        Score firstScore = null;
+        Score secondScore = null;
+        for (Score score : this.scores) {
+          if(score == null) {
+
+          }
+        }
+        if (firstScore == null) {
+          firstScore = new Score(scoreDefinition, name1);
+          this.scores.add(firstScore);
+        }
+        if (secondScore == null) {
+          secondScore = new Score(scoreDefinition, name2);
+          this.scores.add(secondScore);
+        }
+
+        final List<PlayerScore> playerScores = result.getScores();
+        firstScore.setNumberOfTests(firstScore.getNumberOfTests() + 1);
+        secondScore.setNumberOfTests(secondScore.getNumberOfTests() + 1);
+        for (int i = 0; i < scoreDefinition.getSize(); i++) {
+          ScoreFragment fragment = scoreDefinition.get(i);
+          ScoreValue firstValue = firstScore.getScoreValues().get(i);
+          ScoreValue secondValue = secondScore.getScoreValues().get(i);
+          if (!fragment.equals(firstValue.getFragment()) || !fragment.equals(secondValue.getFragment())) {
+            logger.error("Could not add current game result to score. Score definition of player and result do not match.");
+            throw new InvalidScoreDefinitionException("ScoreDefinition of player does not match expected score definition");
+          }
+          if (Objects.equals(fragment.getAggregation(), ScoreAggregation.AVERAGE)) {
+            firstValue.setValue(updateAverage(firstValue.getValue(), firstScore.getNumberOfTests(), playerScores.get(0).getValues().get(i)));
+            secondValue.setValue(updateAverage(secondValue.getValue(), secondScore.getNumberOfTests(), playerScores.get(1).getValues().get(i)));
+          } else if (Objects.equals(fragment.getAggregation(), ScoreAggregation.SUM)) {
+            firstValue.setValue(firstValue.getValue().add(playerScores.get(0).getValues().get(i)));
+            secondValue.setValue(secondValue.getValue().add(playerScores.get(1).getValues().get(i)));
+          }
+        }
+        Score score = ((PlayerScoreResponse) message).getScore();
+
+        for (ClientPlayer player : players) {
+          if (player.name.equals(score.getDisplayName())) {
+            player.score = score;
+            break;
+          }
+        }
+
+        List<ScoreValue> values = score.getScoreValues();
+        logger.info(String.format("New score for %s: Siegpunkte %s, \u2205Wert 1 %5.2f after %s of %s tests",
+            score.getDisplayName(), values.get(0).getValue(), values.get(1).getValue(), finishedTests, totalTests));
+
+        if (isSignificant() || terminateWhenPossible) {
+          printScores();
+          exit(0);
+        }
 
         try {
           for (ClientPlayer player : players)
@@ -244,26 +297,6 @@ public class TestClient extends XStreamClient {
           System.out.print("#");
         }
       }
-    } else if (message instanceof PlayerScoreResponse) {
-      playerScores++;
-      Score score = ((PlayerScoreResponse) message).getScore();
-
-      for (ClientPlayer player : players) {
-        if (player.name.equals(score.getDisplayName())) {
-          player.score = score;
-          break;
-        }
-      }
-
-      List<ScoreValue> values = score.getScoreValues();
-      logger.info(String.format("New score for %s: Siegpunkte %s, \u2205Wert 1 %5.2f after %s of %s tests",
-              score.getDisplayName(), values.get(0).getValue(), values.get(1).getValue(), finishedTests, totalTests));
-
-      if (playerScores == 2 && (isSignificant() || terminateWhenPossible)) {
-        printScores();
-        exit(0);
-      }
-
     } else if (message instanceof GamePreparedResponse) {
       logger.debug("Received PrepareGame - starting clients");
       playerScores = 0;
@@ -305,6 +338,14 @@ public class TestClient extends XStreamClient {
     } else {
       logger.debug("Received uninteresting " + message.getClass().getSimpleName());
     }
+  }
+
+  /** Calculates a new average value: average = oldAverage * ((#amount - 1)/ #amount) + newValue / #amount */
+  private BigDecimal updateAverage(BigDecimal oldAverage, int amount, BigDecimal newValue) {
+    BigDecimal decAmount = new BigDecimal(amount);
+    return oldAverage.multiply(decAmount.subtract(BigDecimal.ONE).divide(decAmount, Configuration.BIG_DECIMAL_SCALE, BigDecimal.ROUND_HALF_UP))
+        .add(newValue.divide(decAmount, Configuration.BIG_DECIMAL_SCALE, BigDecimal.ROUND_HALF_UP))
+        .round(new MathContext(Configuration.BIG_DECIMAL_SCALE + 2));
   }
 
   private void startPlayer(int id, String reservation) throws IOException {

@@ -3,7 +3,6 @@ package sc.server
 import org.slf4j.LoggerFactory
 import sc.api.plugins.exceptions.RescuableClientException
 import sc.protocol.requests.*
-import sc.protocol.responses.PlayerScoreResponse
 import sc.protocol.responses.ProtocolErrorMessage
 import sc.protocol.responses.RoomPacket
 import sc.protocol.responses.TestModeResponse
@@ -15,7 +14,6 @@ import sc.server.network.ClientManager
 import sc.server.network.IClientListener
 import sc.server.network.PacketCallback
 import sc.shared.InvalidGameStateException
-import sc.shared.Score
 import java.io.Closeable
 import java.io.IOException
 
@@ -108,13 +106,6 @@ open class Lobby: GameRoomManager(), IClientListener, Closeable {
                         room.cancel()
                         // TODO check whether all clients receive game over message
                     }
-                    is PlayerScoreRequest -> {
-                        val displayName = packet.displayName
-                        val score = getScoreOfPlayer(displayName)
-                                ?: throw IllegalArgumentException("Score for \"$displayName\" could not be found!")
-                        logger.debug("Sending score of player \"{}\"", displayName)
-                        source.send(PlayerScoreResponse(score))
-                    }
                     is TestModeRequest -> {
                         val testMode = packet.testMode
                         logger.info("Setting Test mode to {}", testMode)
@@ -126,15 +117,6 @@ open class Lobby: GameRoomManager(), IClientListener, Closeable {
             }
             callback.setProcessed()
         }
-    }
-    
-    private fun getScoreOfPlayer(displayName: String): Score? {
-        for (score in this.scores) {
-            if (score.displayName == displayName) {
-                return score
-            }
-        }
-        return null
     }
     
     override fun close() {

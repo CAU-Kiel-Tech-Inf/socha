@@ -1,8 +1,12 @@
-package sc.shared;
+package sc;
 
 import com.thoughtworks.xstream.annotations.XStreamAlias;
 import com.thoughtworks.xstream.annotations.XStreamAsAttribute;
 import com.thoughtworks.xstream.annotations.XStreamImplicit;
+import org.jetbrains.annotations.NotNull;
+import sc.shared.ScoreDefinition;
+import sc.shared.ScoreFragment;
+import sc.shared.ScoreValue;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -13,7 +17,7 @@ import java.util.List;
 public class Score implements Iterable<ScoreValue> {
 
   @XStreamAsAttribute
-  private String displayName;
+  private final String displayName;
 
   @XStreamAsAttribute
   private int numberOfTests;
@@ -21,7 +25,7 @@ public class Score implements Iterable<ScoreValue> {
   @XStreamImplicit(itemFieldName = "values")
   private List<ScoreValue> scoreValues = new ArrayList<>(2);
 
-  public Score(ScoreDefinition scoreDefinition, String displayName) {
+  public Score(String displayName) {
     for (ScoreFragment fragment : scoreDefinition) {
       scoreValues.add(new ScoreValue(fragment, new BigDecimal(0)));
     }
@@ -29,9 +33,14 @@ public class Score implements Iterable<ScoreValue> {
     this.numberOfTests = 0;
   }
 
+  @NotNull
   @Override
   public Iterator<ScoreValue> iterator() {
     return this.scoreValues.iterator();
+  }
+
+  public List<ScoreValue> getScoreValues() {
+    return scoreValues;
   }
 
   public String getDisplayName() {
@@ -42,16 +51,10 @@ public class Score implements Iterable<ScoreValue> {
     return numberOfTests;
   }
 
-  public ScoreDefinition getScoreDefinition() {
-    return new ScoreDefinition((ScoreFragment[]) scoreValues.stream().map(ScoreValue::getFragment).toArray());
-  }
-
-  public List<ScoreValue> getScoreValues() {
-    return scoreValues;
-  }
-
   public void setNumberOfTests(int numberOfTests) {
     this.numberOfTests = numberOfTests;
   }
+
+
 
 }

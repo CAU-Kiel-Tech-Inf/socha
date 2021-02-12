@@ -275,10 +275,6 @@ class RequestTest: RealServerTest() {
         TestHelper.assertEqualsWithTimeout("false", { Configuration.get(Configuration.TEST_MODE) }, 1000)
     }
     
-    // TODO implement @Test
-    fun getScoreForPlayerRequest() {
-    }
-    
     @Test
     fun timeoutRequest() {
         player1.authenticate(PASSWORD)

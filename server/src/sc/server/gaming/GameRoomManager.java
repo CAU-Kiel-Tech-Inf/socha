@@ -30,8 +30,6 @@ public class GameRoomManager {
 
   private static final Logger logger = LoggerFactory.getLogger(GameRoomManager.class);
 
-  private List<Score> scores = new ArrayList<>();
-
   /** Default constructor, initializes rooms, loads available plugins. */
   public GameRoomManager() {
     this.rooms = new HashMap<>();
@@ -216,71 +214,6 @@ public class GameRoomManager {
   /** Remove specified room from this manager. */
   public synchronized void remove(GameRoom gameRoom) {
     this.rooms.remove(gameRoom.getId());
-  }
-
-  public List<Score> getScores() {
-    return scores;
-  }
-
-  /**
-   * Called by gameRoom after game ended and test mode enabled to save results in playerScores.
-   *
-   * @param name1        displayName of player1
-   * @param name2        displayName of player2
-   *
-   * @throws InvalidScoreDefinitionException if scoreDefinitions do not match
-   */
-  public void addResultToScore(GameResult result, String name1, String name2) throws InvalidScoreDefinitionException {
-    if (name1.equals(name2)) {
-      logger.warn("Both player playerScores have the same displayName. Won't save test relevant data");
-      return;
-    }
-    ScoreDefinition scoreDefinition = result.getDefinition();
-    Score firstScore = null;
-    Score secondScore = null;
-    for (Score score : this.scores) {
-      if (score.getDisplayName().equals(name1)) {
-        firstScore = score;
-      } else if (score.getDisplayName().equals(name2)) {
-        secondScore = score;
-      }
-    }
-    if (firstScore == null) {
-      firstScore = new Score(scoreDefinition, name1);
-      this.scores.add(firstScore);
-    }
-    if (secondScore == null) {
-      secondScore = new Score(scoreDefinition, name2);
-      this.scores.add(secondScore);
-    }
-
-    final List<PlayerScore> playerScores = result.getScores();
-    firstScore.setNumberOfTests(firstScore.getNumberOfTests() + 1);
-    secondScore.setNumberOfTests(secondScore.getNumberOfTests() + 1);
-    for (int i = 0; i < scoreDefinition.getSize(); i++) {
-      ScoreFragment fragment = scoreDefinition.get(i);
-      ScoreValue firstValue = firstScore.getScoreValues().get(i);
-      ScoreValue secondValue = secondScore.getScoreValues().get(i);
-      if (!fragment.equals(firstValue.getFragment()) || !fragment.equals(secondValue.getFragment())) {
-        logger.error("Could not add current game result to score. Score definition of player and result do not match.");
-        throw new InvalidScoreDefinitionException("ScoreDefinition of player does not match expected score definition");
-      }
-      if (Objects.equals(fragment.getAggregation(), ScoreAggregation.AVERAGE)) {
-        firstValue.setValue(updateAverage(firstValue.getValue(), firstScore.getNumberOfTests(), playerScores.get(0).getValues().get(i)));
-        secondValue.setValue(updateAverage(secondValue.getValue(), secondScore.getNumberOfTests(), playerScores.get(1).getValues().get(i)));
-      } else if (Objects.equals(fragment.getAggregation(), ScoreAggregation.SUM)) {
-        firstValue.setValue(firstValue.getValue().add(playerScores.get(0).getValues().get(i)));
-        secondValue.setValue(secondValue.getValue().add(playerScores.get(1).getValues().get(i)));
-      }
-    }
-  }
-
-  /** Calculates a new average value: average = oldAverage * ((#amount - 1)/ #amount) + newValue / #amount */
-  private BigDecimal updateAverage(BigDecimal oldAverage, int amount, BigDecimal newValue) {
-    BigDecimal decAmount = new BigDecimal(amount);
-    return oldAverage.multiply(decAmount.subtract(BigDecimal.ONE).divide(decAmount, Configuration.BIG_DECIMAL_SCALE, BigDecimal.ROUND_HALF_UP))
-            .add(newValue.divide(decAmount, Configuration.BIG_DECIMAL_SCALE, BigDecimal.ROUND_HALF_UP))
-            .round(new MathContext(Configuration.BIG_DECIMAL_SCALE + 2));
   }
 
 }
